@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Application {
+  id          Int      @id @default(autoincrement())
+  platform    String
+  title       String
+  company     String
+  location    String?
+  url         String   @unique
+  status      String   @default("applied") // applied | pending | blocked | external
+  dateApplied DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("applications")
+}
