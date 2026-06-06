@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import ApplicationTable from "@/components/ApplicationTable";
+import LogoutButton from "@/components/LogoutButton";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,10 @@ export default async function DashboardPage() {
           <Link href="/" className="font-bold text-lg hover:text-white/80 transition">
             ← Thomas Dufour
           </Link>
-          <span className="text-white/50 text-sm">Dashboard candidatures</span>
+          <div className="flex items-center gap-4">
+            <span className="text-white/50 text-sm">Dashboard candidatures</span>
+            <LogoutButton />
+          </div>
         </div>
       </nav>
 
