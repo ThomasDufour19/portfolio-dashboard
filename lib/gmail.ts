@@ -152,41 +152,70 @@ export async function getValidAccessToken(): Promise<string> {
 // ─── Classification des emails ────────────────────────────────────────────────
 
 const INTERVIEW_KEYWORDS = [
+  // FR
   "entretien",
-  "interview",
   "rencontrer",
   "rencontre",
   "convocation",
   "visioconférence",
   "visio",
-  "réunion",
   "rdv",
   "rendez-vous",
+  "souhaitons vous rencontrer",
+  "vous proposons un entretien",
+  "planifier un échange",
+  "prendre contact avec vous",
+  "votre profil correspond",
+  "votre candidature a retenu",
+  "retenu votre candidature",
+  "sélectionné",
+  "selectionne",
+  "avons retenu",
+  // EN
+  "interview",
   "phone screen",
   "we'd like to meet",
   "meet with you",
   "schedule a call",
-  "planifier un appel",
+  "schedule a meeting",
+  "invite you to",
 ];
 
 const REJECTION_KEYWORDS = [
+  // FR
   "ne correspond pas",
   "ne retient pas",
   "n'a pas été retenue",
   "n'a pas retenu",
   "sans suite",
+  "n'avons pas pu donner une suite",
+  "pas pu donner suite",
+  "ne donner pas suite",
+  "ne pas retenir",
   "poursuivre sans",
   "profil ne correspond",
-  "other candidates",
-  "d'autres candidats",
-  "unfortunately",
-  "malheureusement",
+  "sommes dans l'obligation de",
+  "dans l'impossibilité",
+  "n'avons pas retenu",
+  "nous avons décidé de ne pas",
   "décision de ne pas",
   "nous ne donnons pas",
   "poste est désormais pourvu",
   "poste a été pourvu",
-  "candidature.*refus",
-  "refus.*candidature",
+  "avons fait le choix",
+  "nous informons que",
+  "malheureusement",
+  "d'autres candidats",
+  "d'autres profils",
+  "ne sommes pas en mesure",
+  "refus",
+  // EN
+  "unfortunately",
+  "other candidates",
+  "not moving forward",
+  "we will not be",
+  "decided not to",
+  "not selected",
 ];
 
 export function classifyEmail(
@@ -294,25 +323,31 @@ export async function scanGmailReplies(): Promise<DetectedEmail[]> {
     .findMany({ select: { gmailId: true } })
     .then((rows) => new Set(rows.map((r) => r.gmailId)));
 
+  // Date de début : date de la 1ère candidature (ou 90 jours par défaut)
+  const since = new Date();
+  since.setDate(since.getDate() - 90);
+  const afterStr = `${since.getFullYear()}/${since.getMonth() + 1}/${since.getDate()}`;
+
   for (const app of applications) {
-    // Normalise le nom de l'entreprise pour la recherche Gmail
+    // Garde seulement les mots significatifs du nom d'entreprise (>3 chars)
     const companyClean = app.company
-      .replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, "")
-      .trim();
+      .replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length > 3)
+      .slice(0, 2) // max 2 mots pour ne pas trop restreindre
+      .join(" ");
+
     if (!companyClean) continue;
 
-    // Cherche dans les 90 derniers jours
-    const since = new Date();
-    since.setDate(since.getDate() - 90);
-    const afterStr = `${since.getFullYear()}/${since.getMonth() + 1}/${since.getDate()}`;
-
-    const query = `from:(${companyClean}) after:${afterStr}`;
+    // Recherche LARGE : le nom de l'entreprise n'importe où dans l'email
+    // + mots-clés liés aux candidatures pour éviter les newsletters
+    const query = `"${companyClean}" (candidature OR alternance OR entretien OR recrutement OR poste OR application) after:${afterStr}`;
 
     let messages: GmailMessage[];
     try {
       messages = await searchGmailMessages(accessToken, query, 10);
     } catch {
-      // Si l'entreprise ne donne pas de résultat, on passe
       continue;
     }
 
@@ -372,6 +407,73 @@ export async function scanGmailReplies(): Promise<DetectedEmail[]> {
         applicationId: app.id,
       });
     }
+  }
+
+  // ── Scan global : emails de recrutement non encore matchés ──────────────
+  // Cherche tous les emails liés à des candidatures sans se limiter aux entreprises connues
+  const broadQuery = `(candidature OR "votre candidature" OR alternance OR recrutement) (entretien OR refus OR retenu OR "sans suite" OR "ne retient pas" OR "nous avons") after:${afterStr}`;
+  let broadMessages: GmailMessage[] = [];
+  try {
+    broadMessages = await searchGmailMessages(accessToken, broadQuery, 30);
+  } catch {}
+
+  for (const msg of broadMessages) {
+    if (existingGmailIds.has(msg.id)) continue;
+    if (alreadyProcessed.has(msg.id)) continue;
+    alreadyProcessed.add(msg.id);
+
+    let details: Awaited<ReturnType<typeof getGmailMessage>>;
+    try {
+      details = await getGmailMessage(accessToken, msg.id);
+    } catch {
+      continue;
+    }
+
+    const category = classifyEmail(details.subject, details.snippet);
+    if (category === "replied") continue; // trop générique sans matching entreprise
+
+    // Tente de matcher une candidature par nom d'entreprise dans le sujet/snippet
+    const textLower = `${details.subject} ${details.snippet} ${details.from}`.toLowerCase();
+    const matchedApp = applications.find((app) => {
+      const words = app.company.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+      return words.some((w) => textLower.includes(w));
+    });
+
+    if (!matchedApp) continue;
+
+    try {
+      await prisma.emailReply.create({
+        data: {
+          applicationId: matchedApp.id,
+          gmailId: details.id,
+          subject: details.subject,
+          from: details.from,
+          snippet: details.snippet.slice(0, 500),
+          category,
+          receivedAt: details.receivedAt,
+        },
+      });
+    } catch {
+      continue;
+    }
+
+    await prisma.application.update({
+      where: { id: matchedApp.id },
+      data: {
+        status: category === "interview" ? "interview" : category === "rejected" ? "rejected" : "replied",
+      },
+    });
+
+    detected.push({
+      gmailId: details.id,
+      subject: details.subject,
+      from: details.from,
+      snippet: details.snippet,
+      category,
+      receivedAt: details.receivedAt,
+      matchedCompany: matchedApp.company,
+      applicationId: matchedApp.id,
+    });
   }
 
   return detected;
