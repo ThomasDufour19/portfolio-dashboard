@@ -3,14 +3,17 @@ import { getGitHubRepos } from "@/lib/github";
 import GitHubRepos from "@/components/GitHubRepos";
 
 const SKILLS = [
-  { name: "React", level: 75 },
-  { name: "JavaScript", level: 80 },
-  { name: "TypeScript", level: 60 },
-  { name: "Python", level: 65 },
-  { name: "PHP / Symfony", level: 55 },
-  { name: "HTML / CSS", level: 90 },
-  { name: "SQL", level: 60 },
-  { name: "Git", level: 70 },
+  { name: "HTML / CSS",    level: 85, tag: "Maîtrisé"    },
+  { name: "JavaScript",    level: 65, tag: "1 an"        },
+  { name: "React",         level: 60, tag: "1 an"        },
+  { name: "Python",        level: 60, tag: "1 an"        },
+  { name: "TypeScript",    level: 55, tag: "1 an"        },
+  { name: "PHP",           level: 55, tag: "1 an"        },
+  { name: "Java",          level: 50, tag: "1 an"        },
+  { name: "SQL",           level: 70, tag: "2 ans"       },
+  { name: "Git",           level: 65, tag: "1 an"        },
+  { name: "Angular",       level: 20, tag: "Notions"     },
+  { name: "C#",            level: 15, tag: "Notions"     },
 ];
 
 export default async function Home() {
@@ -93,11 +96,11 @@ export default async function Home() {
               <div key={skill.name}>
                 <div className="flex justify-between text-sm mb-1.5">
                   <span className="font-medium">{skill.name}</span>
-                  <span className="text-white/40">{skill.level}%</span>
+                  <span className="text-white/30 text-xs">{skill.tag}</span>
                 </div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all"
                     style={{ width: `${skill.level}%` }}
                   />
                 </div>
