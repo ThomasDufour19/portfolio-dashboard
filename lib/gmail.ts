@@ -300,127 +300,59 @@ export async function getGmailMessage(
 // ─── Scan principal ───────────────────────────────────────────────────────────
 
 /**
- * Scanne Gmail pour chaque candidature et détecte les réponses.
- * Met à jour le statut en DB et enregistre les EmailReply.
- * Retourne les emails détectés.
+ * Nouvelle approche : UNE SEULE recherche Gmail large → on cherche tous
+ * les emails de recrutement reçus, puis on matche localement avec les candidatures.
+ * Beaucoup plus efficace que 52 recherches séparées.
+ *
+ * En plus : marque automatiquement comme "no_reply" les candidatures
+ * envoyées il y a plus de 7 jours sans réponse.
  */
 export async function scanGmailReplies(): Promise<DetectedEmail[]> {
   const accessToken = await getValidAccessToken();
 
-  // Récupère toutes les candidatures encore sans réponse confirmée
+  // Candidatures sans réponse confirmée
   const applications = await prisma.application.findMany({
-    where: {
-      status: { notIn: ["interview", "rejected"] },
-    },
-    select: { id: true, company: true, title: true, status: true },
+    where: { status: { notIn: ["interview", "rejected"] } },
+    select: { id: true, company: true, title: true, status: true, dateApplied: true },
   });
 
+  // IDs Gmail déjà traités
+  const existingGmailIds = new Set(
+    (await prisma.emailReply.findMany({ select: { gmailId: true } }))
+      .map((r) => r.gmailId)
+  );
+
   const detected: DetectedEmail[] = [];
-  const alreadyProcessed = new Set<string>();
+  const processed  = new Set<string>();
 
-  // IDs Gmail déjà enregistrés (pour éviter les doublons)
-  const existingGmailIds = await prisma.emailReply
-    .findMany({ select: { gmailId: true } })
-    .then((rows) => new Set(rows.map((r) => r.gmailId)));
-
-  // Date de début : date de la 1ère candidature (ou 90 jours par défaut)
+  // Date depuis laquelle chercher (date de la 1ère candidature - 2 jours)
   const since = new Date();
   since.setDate(since.getDate() - 90);
   const afterStr = `${since.getFullYear()}/${since.getMonth() + 1}/${since.getDate()}`;
 
-  for (const app of applications) {
-    // Garde seulement les mots significatifs du nom d'entreprise (>3 chars)
-    const companyClean = app.company
-      .replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, " ")
-      .trim()
-      .split(/\s+/)
-      .filter((w) => w.length > 3)
-      .slice(0, 2) // max 2 mots pour ne pas trop restreindre
-      .join(" ");
+  // ── ÉTAPE 1 : 2 recherches larges couvrant tous les cas ──────────────────
+  const queries = [
+    // Emails avec réponse positive (entretien, convocation…)
+    `(candidature OR alternance OR recrutement) (entretien OR convocation OR "nous avons retenu" OR "votre profil" OR sélectionné OR rdv OR "rendez-vous") after:${afterStr}`,
+    // Emails avec réponse négative (refus, sans suite…)
+    `(candidature OR alternance OR recrutement) (refus OR "sans suite" OR malheureusement OR "ne retient pas" OR "n'avons pas retenu" OR "pourvu") after:${afterStr}`,
+    // Accusés de réception et autres réponses
+    `(candidature OR alternance) ("bien reçu" OR "avons bien reçu" OR "pris en compte" OR "bonne réception") after:${afterStr}`,
+  ];
 
-    if (!companyClean) continue;
-
-    // Recherche LARGE : le nom de l'entreprise n'importe où dans l'email
-    // + mots-clés liés aux candidatures pour éviter les newsletters
-    const query = `"${companyClean}" (candidature OR alternance OR entretien OR recrutement OR poste OR application) after:${afterStr}`;
-
-    let messages: GmailMessage[];
+  const allMessages: GmailMessage[] = [];
+  for (const q of queries) {
     try {
-      messages = await searchGmailMessages(accessToken, query, 10);
-    } catch {
-      continue;
-    }
-
-    for (const msg of messages) {
-      if (existingGmailIds.has(msg.id)) continue;
-      if (alreadyProcessed.has(msg.id)) continue;
-      alreadyProcessed.add(msg.id);
-
-      let details: Awaited<ReturnType<typeof getGmailMessage>>;
-      try {
-        details = await getGmailMessage(accessToken, msg.id);
-      } catch {
-        continue;
-      }
-
-      const category = classifyEmail(details.subject, details.snippet);
-
-      // Enregistre en DB
-      try {
-        await prisma.emailReply.create({
-          data: {
-            applicationId: app.id,
-            gmailId: details.id,
-            subject: details.subject,
-            from: details.from,
-            snippet: details.snippet.slice(0, 500),
-            category,
-            receivedAt: details.receivedAt,
-          },
-        });
-      } catch {
-        // Peut arriver si gmailId déjà existant (race condition)
-        continue;
-      }
-
-      // Met à jour le statut de la candidature
-      const newStatus =
-        category === "interview"
-          ? "interview"
-          : category === "rejected"
-          ? "rejected"
-          : "replied";
-
-      await prisma.application.update({
-        where: { id: app.id },
-        data: { status: newStatus },
-      });
-
-      detected.push({
-        gmailId: details.id,
-        subject: details.subject,
-        from: details.from,
-        snippet: details.snippet,
-        category,
-        receivedAt: details.receivedAt,
-        matchedCompany: app.company,
-        applicationId: app.id,
-      });
-    }
+      const msgs = await searchGmailMessages(accessToken, q, 50);
+      allMessages.push(...msgs);
+    } catch {}
   }
 
-  // ── Scan global : emails de recrutement non encore matchés ──────────────
-  // Cherche tous les emails liés à des candidatures sans se limiter aux entreprises connues
-  const broadQuery = `(candidature OR "votre candidature" OR alternance OR recrutement) (entretien OR refus OR retenu OR "sans suite" OR "ne retient pas" OR "nous avons") after:${afterStr}`;
-  let broadMessages: GmailMessage[] = [];
-  try {
-    broadMessages = await searchGmailMessages(accessToken, broadQuery, 30);
-  } catch {}
-
-  for (const msg of broadMessages) {
+  // ── ÉTAPE 2 : pour chaque email, récupère les métadonnées ────────────────
+  for (const msg of allMessages) {
     if (existingGmailIds.has(msg.id)) continue;
-    if (alreadyProcessed.has(msg.id)) continue;
-    alreadyProcessed.add(msg.id);
+    if (processed.has(msg.id)) continue;
+    processed.add(msg.id);
 
     let details: Awaited<ReturnType<typeof getGmailMessage>>;
     try {
@@ -429,50 +361,78 @@ export async function scanGmailReplies(): Promise<DetectedEmail[]> {
       continue;
     }
 
-    const category = classifyEmail(details.subject, details.snippet);
-    if (category === "replied") continue; // trop générique sans matching entreprise
-
-    // Tente de matcher une candidature par nom d'entreprise dans le sujet/snippet
+    // ── ÉTAPE 3 : match avec une candidature ─────────────────────────────
     const textLower = `${details.subject} ${details.snippet} ${details.from}`.toLowerCase();
+
+    // Cherche l'entreprise dont le nom apparaît dans l'email
     const matchedApp = applications.find((app) => {
-      const words = app.company.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-      return words.some((w) => textLower.includes(w));
+      const words = app.company
+        .replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, " ")
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 3); // ignore mots courts type "SAS", "SNC"…
+      return words.length > 0 && words.some((w) => textLower.includes(w));
     });
 
     if (!matchedApp) continue;
+
+    const category = classifyEmail(details.subject, details.snippet);
 
     try {
       await prisma.emailReply.create({
         data: {
           applicationId: matchedApp.id,
-          gmailId: details.id,
-          subject: details.subject,
-          from: details.from,
-          snippet: details.snippet.slice(0, 500),
+          gmailId:       details.id,
+          subject:       details.subject,
+          from:          details.from,
+          snippet:       details.snippet.slice(0, 500),
           category,
-          receivedAt: details.receivedAt,
+          receivedAt:    details.receivedAt,
         },
       });
     } catch {
-      continue;
+      continue; // gmailId déjà en DB (race condition)
     }
+
+    const newStatus =
+      category === "interview" ? "interview" :
+      category === "rejected"  ? "rejected"  : "replied";
 
     await prisma.application.update({
       where: { id: matchedApp.id },
-      data: {
-        status: category === "interview" ? "interview" : category === "rejected" ? "rejected" : "replied",
-      },
+      data:  { status: newStatus },
     });
 
     detected.push({
-      gmailId: details.id,
-      subject: details.subject,
-      from: details.from,
-      snippet: details.snippet,
+      gmailId:        details.id,
+      subject:        details.subject,
+      from:           details.from,
+      snippet:        details.snippet,
       category,
-      receivedAt: details.receivedAt,
+      receivedAt:     details.receivedAt,
       matchedCompany: matchedApp.company,
-      applicationId: matchedApp.id,
+      applicationId:  matchedApp.id,
+    });
+  }
+
+  // ── ÉTAPE 4 : marque "no_reply" les candidatures sans réponse > 7 jours ──
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const noReply = applications.filter(
+    (app) =>
+      app.status === "applied" &&
+      new Date(app.dateApplied) < sevenDaysAgo
+  );
+
+  if (noReply.length > 0) {
+    await prisma.application.updateMany({
+      where: {
+        id:     { in: noReply.map((a) => a.id) },
+        status: "applied",
+      },
+      data: { status: "no_reply" },
     });
   }
 

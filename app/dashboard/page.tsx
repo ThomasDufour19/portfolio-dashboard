@@ -24,13 +24,14 @@ export default async function DashboardPage() {
   const { total, byStatus, byPlatform, recent } = await getStats();
 
   const statusMap: Record<string, { label: string; color: string }> = {
-    applied:   { label: "Envoyée",       color: "bg-green-500/20 text-green-400" },
-    pending:   { label: "En attente",    color: "bg-yellow-500/20 text-yellow-400" },
-    blocked:   { label: "Bloquée",       color: "bg-red-500/20 text-red-400" },
-    external:  { label: "Site externe",  color: "bg-blue-500/20 text-blue-400" },
-    replied:   { label: "Réponse reçue", color: "bg-purple-500/20 text-purple-400" },
-    interview: { label: "Entretien !",   color: "bg-emerald-500/20 text-emerald-400" },
-    rejected:  { label: "Refus",         color: "bg-red-700/20 text-red-500" },
+    interview: { label: "🎯 Entretien",      color: "bg-emerald-500/20 text-emerald-400" },
+    replied:   { label: "💬 Réponse",        color: "bg-purple-500/20 text-purple-400" },
+    no_reply:  { label: "⏰ Sans réponse",   color: "bg-orange-500/20 text-orange-400" },
+    applied:   { label: "✅ Envoyée",        color: "bg-green-500/20 text-green-400" },
+    external:  { label: "🌐 Site externe",   color: "bg-blue-500/20 text-blue-400" },
+    rejected:  { label: "❌ Refus",          color: "bg-red-700/20 text-red-500" },
+    pending:   { label: "⏳ En attente",     color: "bg-yellow-500/20 text-yellow-400" },
+    blocked:   { label: "🔒 Bloquée",        color: "bg-white/10 text-white/40" },
   };
 
   const statusCounts = Object.fromEntries(
