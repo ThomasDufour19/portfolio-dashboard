@@ -70,7 +70,13 @@ export default async function DashboardPage() {
         </div>
 
         {/* ── TABLEAU ── */}
-        <ApplicationTable applications={recent} statusMap={statusMap} />
+        <ApplicationTable
+          applications={recent.map((a) => ({
+            ...a,
+            dateApplied: a.dateApplied.toISOString(),
+          }))}
+          statusMap={statusMap}
+        />
       </div>
     </main>
   );
