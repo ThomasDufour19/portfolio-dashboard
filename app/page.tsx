@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getGitHubRepos } from "@/lib/github";
 import GitHubRepos from "@/components/GitHubRepos";
 
@@ -32,9 +33,9 @@ export default async function Home() {
 
       {/* ── HERO ── */}
       <section className="pt-32 pb-24 px-6 text-center max-w-3xl mx-auto">
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 mx-auto mb-6 flex items-center justify-center text-3xl font-bold">
+        <Link href="/dashboard" className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 mx-auto mb-6 flex items-center justify-center text-3xl font-bold cursor-default select-none">
           TD
-        </div>
+        </Link>
         <h1 className="text-5xl font-bold mb-4">
           Thomas{" "}
           <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
