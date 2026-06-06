@@ -49,16 +49,17 @@ export default function ApplicationTable({ applications, statusMap }: Props) {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+          className="px-4 py-2 bg-[#1a1a1a] border border-white/20 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+          style={{ colorScheme: "dark" }}
         >
-          <option value="all">Tous les statuts</option>
-          <option value="applied">Envoyées</option>
-          <option value="external">Sites externes</option>
-          <option value="pending">En attente</option>
-          <option value="blocked">Bloquées</option>
-          <option value="replied">Réponse reçue</option>
-          <option value="interview">Entretien !</option>
-          <option value="rejected">Refus</option>
+          <option value="all"    className="bg-[#1a1a1a] text-white">Tous les statuts</option>
+          <option value="applied"   className="bg-[#1a1a1a] text-white">Envoyées</option>
+          <option value="external"  className="bg-[#1a1a1a] text-white">Sites externes</option>
+          <option value="pending"   className="bg-[#1a1a1a] text-white">En attente</option>
+          <option value="blocked"   className="bg-[#1a1a1a] text-white">Bloquées</option>
+          <option value="replied"   className="bg-[#1a1a1a] text-white">Réponse reçue</option>
+          <option value="interview" className="bg-[#1a1a1a] text-white">Entretien !</option>
+          <option value="rejected"  className="bg-[#1a1a1a] text-white">Refus</option>
         </select>
         <span className="text-white/40 text-sm self-center">
           {filtered.length} résultat{filtered.length !== 1 ? "s" : ""}
