@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import Link from "next/link";
 import ApplicationTable from "@/components/ApplicationTable";
 import LogoutButton from "@/components/LogoutButton";
+import BotControl from "@/components/BotControl";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +50,12 @@ export default async function DashboardPage() {
 
       <div className="max-w-6xl mx-auto px-6 pt-24 pb-16">
         <h1 className="text-3xl font-bold mb-2">📊 Mes candidatures</h1>
-        <p className="text-white/50 text-sm mb-10">
+        <p className="text-white/50 text-sm mb-8">
           Suivi automatique via le bot Job Hunter
         </p>
+
+        {/* ── CONTRÔLE BOT ── */}
+        <BotControl />
 
         {/* ── STATS ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">

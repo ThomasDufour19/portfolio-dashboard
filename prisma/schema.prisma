@@ -7,6 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model BotStatus {
+  id        Int      @id @default(1)
+  command   String   @default("idle")    // idle | start | stop
+  status    String   @default("stopped") // stopped | running
+  message   String?
+  updatedAt DateTime @updatedAt
+
+  @@map("bot_status")
+}
+
 model Application {
   id          Int      @id @default(autoincrement())
   platform    String
