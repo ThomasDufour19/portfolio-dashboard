@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getGitHubRepos } from "@/lib/github";
 import GitHubRepos from "@/components/GitHubRepos";
 
@@ -27,12 +26,6 @@ export default async function Home() {
             <a href="#skills" className="hover:text-white transition">Compétences</a>
             <a href="#projects" className="hover:text-white transition">Projets</a>
             <a href="#contact" className="hover:text-white transition">Contact</a>
-            <Link
-              href="/dashboard"
-              className="text-blue-400 hover:text-blue-300 transition font-medium"
-            >
-              Dashboard →
-            </Link>
           </div>
         </div>
       </nav>
@@ -74,12 +67,6 @@ export default async function Home() {
           >
             LinkedIn
           </a>
-          <Link
-            href="/dashboard"
-            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition"
-          >
-            📊 Mes candidatures
-          </Link>
         </div>
       </section>
 
