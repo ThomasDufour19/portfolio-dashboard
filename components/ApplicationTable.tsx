@@ -56,6 +56,9 @@ export default function ApplicationTable({ applications, statusMap }: Props) {
           <option value="external">Sites externes</option>
           <option value="pending">En attente</option>
           <option value="blocked">Bloquées</option>
+          <option value="replied">Réponse reçue</option>
+          <option value="interview">Entretien !</option>
+          <option value="rejected">Refus</option>
         </select>
         <span className="text-white/40 text-sm self-center">
           {filtered.length} résultat{filtered.length !== 1 ? "s" : ""}

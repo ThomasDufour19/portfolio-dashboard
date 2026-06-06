@@ -18,16 +18,46 @@ model BotStatus {
 }
 
 model Application {
-  id          Int      @id @default(autoincrement())
-  platform    String
-  title       String
-  company     String
-  location    String?
-  url         String   @unique
-  status      String   @default("applied") // applied | pending | blocked | external
-  dateApplied DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           Int           @id @default(autoincrement())
+  platform     String
+  title        String
+  company      String
+  location     String?
+  url          String        @unique
+  // applied | pending | blocked | external | replied | interview | rejected
+  status       String        @default("applied")
+  dateApplied  DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  emailReplies EmailReply[]
 
   @@map("applications")
+}
+
+// Stocke le token OAuth Google (une seule ligne)
+model GmailToken {
+  id           Int      @id @default(1)
+  accessToken  String
+  refreshToken String
+  expiryDate   BigInt   // timestamp ms
+  email        String
+  updatedAt    DateTime @updatedAt
+
+  @@map("gmail_tokens")
+}
+
+// Historique des emails détectés pour chaque candidature
+model EmailReply {
+  id            Int         @id @default(autoincrement())
+  applicationId Int
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  gmailId       String      @unique // ID du message Gmail
+  subject       String
+  from          String
+  snippet       String      // extrait du corps
+  category      String      // interview | rejected | replied
+  receivedAt    DateTime
+  createdAt     DateTime    @default(now())
+
+  @@map("email_replies")
 }
