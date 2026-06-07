@@ -68,16 +68,16 @@ export default function ApplicationTable({ applications, statusMap }: Props) {
       </div>
 
       {/* Tableau */}
-      <div className="overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0f0f0f]">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="bg-white/5 text-white/50 uppercase text-xs tracking-wider">
-              <th className="px-5 py-3 text-left">Poste</th>
-              <th className="px-5 py-3 text-left">Entreprise</th>
-              <th className="px-5 py-3 text-left hidden md:table-cell">Localisation</th>
-              <th className="px-5 py-3 text-left">Statut</th>
-              <th className="px-5 py-3 text-left hidden md:table-cell">Date</th>
-              <th className="px-5 py-3 text-left">Lien</th>
+            <tr className="bg-[#161616] border-b border-white/10">
+              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 w-[28%]">Poste</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 w-[18%]">Entreprise</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 hidden lg:table-cell">Localisation</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 w-[160px]">Statut</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 hidden md:table-cell w-[100px]">Date</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest w-[70px]">Lien</th>
             </tr>
           </thead>
           <tbody>
@@ -89,31 +89,41 @@ export default function ApplicationTable({ applications, statusMap }: Props) {
               return (
                 <tr
                   key={app.id}
-                  className={`border-t border-white/5 hover:bg-white/5 transition ${
-                    i % 2 === 0 ? "" : "bg-white/[0.02]"
+                  className={`border-b border-white/[0.06] hover:bg-white/[0.04] transition-colors group ${
+                    i % 2 === 0 ? "bg-transparent" : "bg-white/[0.02]"
                   }`}
                 >
-                  <td className="px-5 py-3 font-medium max-w-[200px] truncate">
-                    {app.title}
+                  <td className="px-4 py-3.5 border-r border-white/5">
+                    <span className="font-medium text-white/90 block truncate max-w-[220px]" title={app.title}>
+                      {app.title}
+                    </span>
                   </td>
-                  <td className="px-5 py-3 text-white/70">{app.company}</td>
-                  <td className="px-5 py-3 text-white/50 hidden md:table-cell">
-                    {app.location ?? "—"}
+                  <td className="px-4 py-3.5 border-r border-white/5">
+                    <span className="text-white/65 font-medium">{app.company}</span>
                   </td>
-                  <td className="px-5 py-3">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${status.color}`}>
+                  <td className="px-4 py-3.5 border-r border-white/5 hidden lg:table-cell">
+                    <span className="text-white/35 text-xs">
+                      {app.location
+                        ? app.location.split(",")[0]  // juste la ville
+                        : "—"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5 border-r border-white/5">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap ${status.color}`}>
                       {status.label}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-white/40 hidden md:table-cell whitespace-nowrap">
-                    {new Date(app.dateApplied).toLocaleDateString("fr-FR")}
+                  <td className="px-4 py-3.5 border-r border-white/5 hidden md:table-cell whitespace-nowrap text-white/35 text-xs">
+                    {new Date(app.dateApplied).toLocaleDateString("fr-FR", {
+                      day: "2-digit", month: "2-digit", year: "2-digit"
+                    })}
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-4 py-3.5">
                     <a
                       href={app.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 transition"
+                      className="text-blue-400/70 hover:text-blue-300 transition-colors text-xs font-medium group-hover:text-blue-300"
                     >
                       Voir →
                     </a>
@@ -123,7 +133,7 @@ export default function ApplicationTable({ applications, statusMap }: Props) {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-white/30">
+                <td colSpan={6} className="px-5 py-16 text-center text-white/25 text-sm">
                   Aucune candidature trouvée
                 </td>
               </tr>
