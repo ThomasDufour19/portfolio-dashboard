@@ -310,45 +310,49 @@ export async function getGmailMessage(
 export async function scanGmailReplies(): Promise<DetectedEmail[]> {
   const accessToken = await getValidAccessToken();
 
-  // Candidatures sans réponse confirmée
+  // Toutes les candidatures (même celles déjà classées, pour ne pas rater une mise à jour)
   const applications = await prisma.application.findMany({
     where: { status: { notIn: ["interview", "rejected"] } },
     select: { id: true, company: true, title: true, status: true, dateApplied: true },
   });
 
-  // IDs Gmail déjà traités
   const existingGmailIds = new Set(
     (await prisma.emailReply.findMany({ select: { gmailId: true } }))
       .map((r) => r.gmailId)
   );
 
   const detected: DetectedEmail[] = [];
-  const processed  = new Set<string>();
+  const processed = new Set<string>();
 
-  // Date depuis laquelle chercher (date de la 1ère candidature - 2 jours)
   const since = new Date();
   since.setDate(since.getDate() - 90);
   const afterStr = `${since.getFullYear()}/${since.getMonth() + 1}/${since.getDate()}`;
 
-  // ── ÉTAPE 1 : 2 recherches larges couvrant tous les cas ──────────────────
+  // ── ÉTAPE 1 : recherche ciblée LinkedIn ──────────────────────────────────
+  // LinkedIn envoie TOUTES les réponses depuis jobs-noreply@linkedin.com
+  // avec l'objet "Votre candidature : [POSTE] chez [ENTREPRISE]"
   const queries = [
-    // Emails avec réponse positive (entretien, convocation…)
-    `(candidature OR alternance OR recrutement) (entretien OR convocation OR "nous avons retenu" OR "votre profil" OR sélectionné OR rdv OR "rendez-vous") after:${afterStr}`,
-    // Emails avec réponse négative (refus, sans suite…)
-    `(candidature OR alternance OR recrutement) (refus OR "sans suite" OR malheureusement OR "ne retient pas" OR "n'avons pas retenu" OR "pourvu") after:${afterStr}`,
-    // Accusés de réception et autres réponses
-    `(candidature OR alternance) ("bien reçu" OR "avons bien reçu" OR "pris en compte" OR "bonne réception") after:${afterStr}`,
+    // Réponses LinkedIn (refus, mises à jour, entretiens)
+    `from:(jobs-noreply@linkedin.com) "votre candidature" after:${afterStr}`,
+    `from:(linkedin.com) "votre candidature" after:${afterStr}`,
+    // Emails directs des recruteurs (hors LinkedIn)
+    `subject:("votre candidature") (malheureusement OR entretien OR refus OR "sans suite" OR "donnons pas suite") after:${afterStr}`,
+    // Convocations directes
+    `subject:(entretien OR convocation OR "phone screen") (alternance OR candidature) after:${afterStr}`,
   ];
 
   const allMessages: GmailMessage[] = [];
+  const seenIds = new Set<string>();
   for (const q of queries) {
     try {
       const msgs = await searchGmailMessages(accessToken, q, 50);
-      allMessages.push(...msgs);
+      for (const m of msgs) {
+        if (!seenIds.has(m.id)) { seenIds.add(m.id); allMessages.push(m); }
+      }
     } catch {}
   }
 
-  // ── ÉTAPE 2 : pour chaque email, récupère les métadonnées ────────────────
+  // ── ÉTAPE 2 : récupère les détails de chaque email ───────────────────────
   for (const msg of allMessages) {
     if (existingGmailIds.has(msg.id)) continue;
     if (processed.has(msg.id)) continue;
@@ -357,23 +361,36 @@ export async function scanGmailReplies(): Promise<DetectedEmail[]> {
     let details: Awaited<ReturnType<typeof getGmailMessage>>;
     try {
       details = await getGmailMessage(accessToken, msg.id);
-    } catch {
-      continue;
+    } catch { continue; }
+
+    // ── ÉTAPE 3 : extrait le nom de l'entreprise ──────────────────────────
+    // LinkedIn format : "Votre candidature : TITRE chez ENTREPRISE"
+    let matchedApp = null;
+    const subjectLower = details.subject.toLowerCase();
+
+    // Cas LinkedIn : "chez ENTREPRISE" dans l'objet
+    const chezMatch = details.subject.match(/chez\s+(.+?)(?:\s*[-–|]|$)/i);
+    if (chezMatch) {
+      const companyFromSubject = chezMatch[1].trim().toLowerCase();
+      matchedApp = applications.find((app) => {
+        const appCompany = app.company.toLowerCase();
+        return appCompany.includes(companyFromSubject) ||
+               companyFromSubject.includes(appCompany) ||
+               // Comparaison partielle : au moins 1 mot significatif commun
+               app.company.toLowerCase().split(/\s+/)
+                 .filter((w) => w.length > 3)
+                 .some((w) => companyFromSubject.includes(w));
+      });
     }
 
-    // ── ÉTAPE 3 : match avec une candidature ─────────────────────────────
-    const textLower = `${details.subject} ${details.snippet} ${details.from}`.toLowerCase();
-
-    // Cherche l'entreprise dont le nom apparaît dans l'email
-    const matchedApp = applications.find((app) => {
-      const words = app.company
-        .replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, " ")
-        .trim()
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((w) => w.length > 3); // ignore mots courts type "SAS", "SNC"…
-      return words.length > 0 && words.some((w) => textLower.includes(w));
-    });
+    // Fallback : cherche le nom de l'entreprise n'importe où dans subject+snippet
+    if (!matchedApp) {
+      const textLower = `${details.subject} ${details.snippet}`.toLowerCase();
+      matchedApp = applications.find((app) => {
+        const words = app.company.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+        return words.length > 0 && words.every((w) => textLower.includes(w));
+      });
+    }
 
     if (!matchedApp) continue;
 
@@ -391,9 +408,7 @@ export async function scanGmailReplies(): Promise<DetectedEmail[]> {
           receivedAt:    details.receivedAt,
         },
       });
-    } catch {
-      continue; // gmailId déjà en DB (race condition)
-    }
+    } catch { continue; }
 
     const newStatus =
       category === "interview" ? "interview" :
@@ -416,25 +431,17 @@ export async function scanGmailReplies(): Promise<DetectedEmail[]> {
     });
   }
 
-  // ── ÉTAPE 4 : marque "no_reply" les candidatures sans réponse > 7 jours ──
+  // ── ÉTAPE 4 : "no_reply" automatique après 7 jours sans réponse ──────────
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const noReply = applications.filter(
-    (app) =>
-      app.status === "applied" &&
-      new Date(app.dateApplied) < sevenDaysAgo
-  );
-
-  if (noReply.length > 0) {
-    await prisma.application.updateMany({
-      where: {
-        id:     { in: noReply.map((a) => a.id) },
-        status: "applied",
-      },
-      data: { status: "no_reply" },
-    });
-  }
+  await prisma.application.updateMany({
+    where: {
+      status:      "applied",
+      dateApplied: { lt: sevenDaysAgo },
+    },
+    data: { status: "no_reply" },
+  });
 
   return detected;
 }
