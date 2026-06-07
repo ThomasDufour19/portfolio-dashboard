@@ -15,6 +15,14 @@ async function getStats() {
     prisma.application.findMany({
       orderBy: { dateApplied: "desc" },
       take: 100,
+      include: {
+        // Récupère le dernier email reçu pour chaque candidature
+        emailReplies: {
+          orderBy: { receivedAt: "desc" },
+          take: 1,
+          select: { receivedAt: true, category: true },
+        },
+      },
     }),
   ]);
   return { total, byStatus, byPlatform, recent };
@@ -90,6 +98,7 @@ export default async function DashboardPage() {
           applications={recent.map((a) => ({
             ...a,
             dateApplied: a.dateApplied.toISOString(),
+            replyDate: a.emailReplies[0]?.receivedAt.toISOString() ?? null,
           }))}
           statusMap={statusMap}
         />

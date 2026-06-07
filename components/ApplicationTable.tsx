@@ -11,6 +11,7 @@ interface Application {
   url: string;
   status: string;
   dateApplied: string;
+  replyDate: string | null;
 }
 
 interface StatusInfo {
@@ -76,7 +77,7 @@ export default function ApplicationTable({ applications, statusMap }: Props) {
               <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 w-[18%]">Entreprise</th>
               <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 hidden lg:table-cell">Localisation</th>
               <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 w-[160px]">Statut</th>
-              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 hidden md:table-cell w-[100px]">Date</th>
+              <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest border-r border-white/5 hidden md:table-cell w-[160px]">Envoi / Réponse</th>
               <th className="px-4 py-3.5 text-left text-xs font-semibold text-white/40 uppercase tracking-widest w-[70px]">Lien</th>
             </tr>
           </thead>
@@ -113,10 +114,23 @@ export default function ApplicationTable({ applications, statusMap }: Props) {
                       {status.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5 border-r border-white/5 hidden md:table-cell whitespace-nowrap text-white/35 text-xs">
-                    {new Date(app.dateApplied).toLocaleDateString("fr-FR", {
-                      day: "2-digit", month: "2-digit", year: "2-digit"
-                    })}
+                  <td className="px-4 py-3.5 border-r border-white/5 hidden md:table-cell">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-white/40 text-xs whitespace-nowrap">
+                        📤 {new Date(app.dateApplied).toLocaleDateString("fr-FR", {
+                          day: "2-digit", month: "2-digit", year: "2-digit"
+                        })}
+                      </span>
+                      {app.replyDate ? (
+                        <span className="text-purple-400/80 text-xs whitespace-nowrap font-medium">
+                          💬 {new Date(app.replyDate).toLocaleDateString("fr-FR", {
+                            day: "2-digit", month: "2-digit", year: "2-digit"
+                          })}
+                        </span>
+                      ) : (
+                        <span className="text-white/15 text-xs">— pas de réponse</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3.5">
                     <a
